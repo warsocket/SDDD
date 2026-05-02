@@ -225,6 +225,9 @@ class Generator():
 	def __truediv__(self, other):
 		return MixGenerator(lambda a, b: a / b if b != 0 else 0, self, self._wrap(other))
 
+	def __pow__(self, other):
+		return MixGenerator(lambda a, b: abs(a)**b * [-1,1][a >= 0]  , self, self._wrap(other))
+
 	def __mod__(self, other):
 		return FMGenerator(self._wrap(other), self)
 
@@ -444,6 +447,49 @@ class LowpassGenerator(Generator):
 		self.gen.reset()
 		self.alpha_gen.reset()
 
+
+class HighpassGenerator(Generator):
+	def __init__(self, gen, alpha_gen):
+		super().__init__()
+		self.gen = gen
+		self.alpha_gen = alpha_gen
+		
+		# Initialisatie (net als bij jouw Lowpass)
+		self.current_val = gen.get()
+		self.last_fresh = self.current_val
+
+	def seek(self, tx):
+		# 1. Update de filters naar beneden (loopt keurig door de boom)
+		self.gen.seek(tx)
+		self.alpha_gen.seek(tx)
+		
+		fresh = self.gen.get()
+		alpha = self.alpha_gen.get()
+		
+		if fresh is None or alpha is None:
+			self.current_val = None
+			self.last_fresh = None
+			return self
+
+		# 2. We voeren de berekening uit
+		# De Lowpass waarde van dit specifieke filter
+		lowpass_val = (self.current_val * alpha) + (fresh * (1.0 - alpha))
+		
+		# Sla de ruwe waarde op
+		self.last_fresh = fresh
+		
+		# 3. Sla de berekende HOOGdoorlaat waarde op in current_val!
+		# Hoogdoorlaat = Input - Laagdoorlaat
+		self.current_val = fresh - lowpass_val
+		return self
+
+	def get(self):
+		# Geen herberekeningen, gewoon passief uitlezen
+		return self.current_val
+
+	def reset(self):
+		self.gen.reset()
+		self.alpha_gen.reset()
 
 
 # From here on only Fluff (ergonomic notation but no new functionality)
